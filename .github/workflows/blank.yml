@@ -1,0 +1,200 @@
+Sub FindMatchingDataAndInsertRow()
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
+
+    Dim wsDummy As Worksheet
+    Dim wsData As Worksheet
+    Dim matchCode5Char As String
+    Dim matchCode2Char As String
+    Dim lastMatchRow As Long
+    Dim r As Long
+    Dim insertRow As Long
+
+    ' Set references to the sheets
+    Set wsDummy = ThisWorkbook.Sheets("Dummy")
+    Set wsData = ThisWorkbook.Sheets("Data")
+
+    ' Find the next visible row with the 5-character code in column M
+    r = FindNextVisibleRow(wsDummy, 1, "M")
+    If r > 0 Then
+        matchCode5Char = wsDummy.Cells(r, "M").Value
+    Else
+        MsgBox "No visible row with a 5-character code found in column M."
+        GoTo CleanExit
+    End If
+
+    ' Find the next visible row with the 2-character code in column B
+    r = FindNextVisibleRow(wsDummy, 1, "B")
+    If r > 0 Then
+        matchCode2Char = wsDummy.Cells(r, "B").Value
+    Else
+        MsgBox "No visible row with a 2-character code found in column B."
+        GoTo CleanExit
+    End If
+
+    ' Check if the codes are of correct length
+    If Len(matchCode5Char) <> 5 Or Len(matchCode2Char) <> 2 Then
+        MsgBox "Code lengths are not correct. 5-character or 2-character code is missing."
+        GoTo CleanExit
+    End If
+
+    ' Initialize lastMatchRow
+    lastMatchRow = 0
+
+    ' Loop through column G in Data sheet to find the last matching 5-character code
+    For r = 2 To wsData.Cells(wsData.Rows.count, "G").End(xlUp).Row
+        If wsData.Cells(r, "G").Value = matchCode5Char And wsData.Cells(r, "F").Value = matchCode2Char Then
+            ' Update the row number of the last match
+            lastMatchRow = r
+        End If
+    Next r
+
+    ' If we found at least one match, insert a row below the last matching row
+    If lastMatchRow > 0 Then
+        insertRow = lastMatchRow + 1
+        wsData.Rows(insertRow).Insert Shift:=xlDown, CopyOrigin:=xlFormatFromLeftOrAbove
+
+        ' Copy and drag down formulas/values as required
+        Dim col As Long
+        For col = 1 To wsData.UsedRange.Columns.count ' Adjust if your columns extend beyond the UsedRange
+            If col <> 11 Then ' Skip column K
+                If wsData.Cells(lastMatchRow, col).HasFormula Then
+                    wsData.Cells(insertRow, col).Formula = wsData.Cells(lastMatchRow, col).Formula
+                Else
+                    wsData.Cells(insertRow, col).Value = wsData.Cells(lastMatchRow, col).Value
+                End If
+            End If
+        Next col
+
+        ' Copy value for column C from the last non-empty cell above the bottom of the column
+        Dim lastNonEmptyRowC As Long
+        lastNonEmptyRowC = wsData.Cells(wsData.Rows.count, "C").End(xlUp).Row
+        If lastNonEmptyRowC > 1 Then ' Ensure there is a value above to copy
+            wsData.Cells(insertRow, "C").Value = wsData.Cells(lastNonEmptyRowC, "C").Value
+        End If
+
+       ' Copy values from Dummy sheet for columns J, L, and N in the new row in Data sheet
+    wsData.Cells(insertRow, "J").Value = wsDummy.Cells(FindNextVisibleRow(wsDummy, 1, "E"), "E").Value
+    wsData.Cells(insertRow, "L").Value = wsDummy.Cells(FindNextVisibleRow(wsDummy, 1, "G"), "G").Value
+    wsData.Cells(insertRow, "N").Value = wsDummy.Cells(FindNextVisibleRow(wsDummy, 1, "H"), "H").Value
+
+    ' Fill down formulas for columns P to AC from the last row with data to the newly inserted row
+    Dim fillRange As Range
+    Set fillRange = wsData.Range(wsData.Cells(lastMatchRow, "P"), wsData.Cells(lastMatchRow, "AC"))
+    fillRange.AutoFill Destination:=wsData.Range(fillRange, wsData.Cells(insertRow, "P").Resize(, fillRange.Columns.count)), Type:=xlFillDefault
+
+    ' Force a recalculation of the entire sheet to update the formulas
+    wsData.Calculate
+
+    MsgBox "Inserted a new row and updated cells below the last matching row at " & insertRow
+
+CleanExit:
+    Application.ScreenUpdating = True
+    Application.Calculation = xlCalculationAutomatic
+    If Application.Calculation <> xlCalculationAutomatic Then
+        Application.Calculate ' Force calculation of all open workbooks
+    End If
+    End If
+End Sub
+
+Function FindNextVisibleRow(ws As Worksheet, startRow As Long, col As String) As Long
+    Dim r As Long
+    For r = startRow + 1 To ws.Cells(ws.Rows.count, col).End(xlUp).Row
+        If Not ws.Rows(r).Hidden And ws.Cells(r, col).Value <> "" Then
+            FindNextVisibleRow = r
+            Exit Function
+        End If
+    Next r
+    FindNextVisibleRow = 0 ' Return 0 if no visible row is found
+End Function
+
+Sub FindMatchingDataAndInsertRowInProportion()
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
+
+    Dim wsDummy As Worksheet
+    Dim wsData As Worksheet
+    Dim wsProportion As Worksheet
+    Dim matchCode5Char As String
+    Dim matchCode2Char As String
+    Dim lastMatchRow As Long
+    Dim r As Long
+    Dim lastRow As Long
+    Dim valueToCopyC As Variant
+    Dim valueToCopyL As Variant
+    Dim valueToCopyD As Variant
+
+    ' Set references to the sheets
+    Set wsDummy = ThisWorkbook.Sheets("Dummy")
+    Set wsData = ThisWorkbook.Sheets("Data")
+    Set wsProportion = ThisWorkbook.Sheets("Proportion")
+
+    ' Get the 5-character code from the Dummy sheet
+    r = FindNextVisibleRow(wsDummy, 1, "M")
+    If r > 0 Then
+        matchCode5Char = wsDummy.Cells(r, "M").Value
+    Else
+        MsgBox "No visible row with a 5-character code found in column M of Dummy sheet."
+        GoTo CleanExit
+    End If
+
+    ' Get the 2-character code from the Dummy sheet
+    r = FindNextVisibleRow(wsDummy, 1, "B")
+    If r > 0 Then
+        matchCode2Char = wsDummy.Cells(r, "B").Value
+    Else
+        MsgBox "No visible row with a 2-character code found in column B of Dummy sheet."
+        GoTo CleanExit
+    End If
+
+    ' Initialize lastMatchRow
+    lastMatchRow = 0
+
+    ' Loop through the Proportion sheet to find the last matching row
+    For r = 2 To wsProportion.Cells(wsProportion.Rows.count, "F").End(xlUp).Row
+        If wsProportion.Cells(r, "F").Value = matchCode5Char And wsProportion.Cells(r, "E").Value = matchCode2Char Then
+            lastMatchRow = r
+        End If
+    Next r
+
+    ' Find the last row in column A of the Data sheet that does not contain a numeric value or contains an error
+    lastRow = wsData.Cells(wsData.Rows.count, "A").End(xlUp).Row
+    For r = lastRow To 2 Step -1
+        If Not IsNumeric(wsData.Cells(r, "A").Value) Or IsError(wsData.Cells(r, "A").Value) Then
+            ' Once found, take the value from column C, L, and D (three cells to the right)
+            valueToCopyC = wsData.Cells(r, "C").Value
+            valueToCopyL = wsData.Cells(r, "L").Value
+            valueToCopyD = wsData.Cells(r, "D").Value
+            Exit For
+        End If
+    Next r
+
+    ' Insert a new row below the last matching row in the Proportion sheet
+     If lastMatchRow > 0 Then
+        wsProportion.Rows(lastMatchRow + 1).Insert Shift:=xlDown, CopyOrigin:=xlFormatFromLeftOrAbove
+        
+        ' Copy the values from the Data sheet to the new row in the Proportion sheet
+        wsProportion.Cells(lastMatchRow + 1, "B").Value = valueToCopyC
+        wsProportion.Cells(lastMatchRow + 1, "K").Value = valueToCopyL
+        wsProportion.Cells(lastMatchRow + 1, "C").Value = valueToCopyD
+
+        ' Drag down formulas for columns D through J if the cell above contains a formula
+        Dim col As Long
+        For col = 4 To 10 ' Columns D to J are represented by numbers 4 to 10
+            If wsProportion.Cells(lastMatchRow, col).HasFormula Then
+                wsProportion.Cells(lastMatchRow, col).AutoFill Destination:=wsProportion.Range(wsProportion.Cells(lastMatchRow, col), wsProportion.Cells(lastMatchRow + 1, col)), Type:=xlFillDefault
+            End If
+        Next col
+
+        MsgBox "Inserted a new row below the last matching row at " & lastMatchRow + 1 & " in the Proportion sheet."
+    Else
+        MsgBox "No matching data found in the Proportion sheet. No row inserted."
+    End If
+
+CleanExit:
+    Application.ScreenUpdating = True
+    Application.Calculation = xlCalculationAutomatic
+End Sub
+
+
+
